@@ -34,6 +34,7 @@ data State = State
     }
     deriving (Show)
 
+queueDir :: String
 queueDir = "./queue/"
 
 main :: IO ()
@@ -71,9 +72,7 @@ mainLoop c st = do
         then case res of
           Message m -> let newSt = messageSendingState st m in mainLoop c newSt
           p ->
-            let newSt = case currentItem st of
-                  Just i  -> messageSendFailedState st
-                  Nothing -> st
+            let newSt = messageSendFailedState st                  
             in  do
                   putStrLn "ERROR:"
                   print p
@@ -99,7 +98,6 @@ mainLoop c st = do
                 _ -> mainLoop c st
         _ -> mainLoop c st
 
-
 handleAuthState :: Client -> Maybe AuthorizationState -> IO ()
 handleAuthState c s = do
   case s of
@@ -107,13 +105,14 @@ handleAuthState c s = do
     Just (AuthorizationStateWaitEncryptionKey _) -> send c CheckDatabaseEncryptionKey { encryption_key = Just "randomencryption" }
     Just AuthorizationStateWaitPhoneNumber       -> do
       putStrLn "Enter bot token"
-      token <- getLine
-      send c CheckAuthenticationBotToken { token = Just token }
+      t <- getLine
+      send c CheckAuthenticationBotToken { token = Just t }
     _ -> return ()
 
 handleQeueueMessage :: Q -> Client -> IO String
 handleQeueueMessage msg c = case method msg of
   "sendText" -> sendWExtra c $ sendTextMsg (chat_id msg) (caption msg)
+  _ -> fail "Cannot match"
 
 emptyState :: State
 emptyState = State { currentSendingExtra = Nothing, currentSendingMessage = Nothing, queue = [], currentItem = Nothing }
