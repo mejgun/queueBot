@@ -41,7 +41,7 @@ packages:
 #
 extra-deps:
 - git: https://github.com/mejgun/haskell-tdlib.git
-  commit: 53135ac49a2b54adc92f4e8b101091fab1f7e1a2
+  commit: 410984c9eec14ecbd79da3fc2ee3f1b9b5c930ba
 
 
 # Override default flag values for local packages and extra-deps
@@ -62,7 +62,7 @@ extra-deps:
 # arch: x86_64
 #
 # Extra directories used by stack for building
-# extra-include-dirs: [/path/to/dir]
+# extra-include-dirs: [lib]
 extra-lib-dirs: [lib]
 #
 # Allow a newer minor version of GHC than the snapshot specifies

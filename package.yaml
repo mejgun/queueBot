@@ -33,13 +33,12 @@ executables:
   queueBot-exe:
     main:                Main.hs
     source-dirs:         app
-    ghc-options:
+    ghc-options: 
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
     - queueBot
-
 tests:
   queueBot-test:
     main:                Spec.hs
