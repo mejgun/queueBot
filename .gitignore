@@ -1,3 +1,6 @@
 .stack-work/
 /queue/
+/build/
+/lib/
+/tdlib_*/
 *~
