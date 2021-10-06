@@ -3,4 +3,6 @@
 /build/
 /lib/
 /tdlib_*/
+queueBot-exe
+/Dockerfile
 *~

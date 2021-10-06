@@ -17,7 +17,7 @@
 #
 # resolver: ./custom-snapshot.yaml
 # resolver: https://example.com/snapshots/2018-01-01.yaml
-resolver: lts-15.10
+resolver: lts-18.10
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -41,7 +41,7 @@ packages:
 #
 extra-deps:
 - git: https://github.com/mejgun/haskell-tdlib.git
-  commit: a92e7bcb3edfa551bf3bcb6f69983d131dc48f4d
+  commit: 1ae2be461d3ff5d0eeeadf5a254d97eec66cd039
 
 
 # Override default flag values for local packages and extra-deps
