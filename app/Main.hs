@@ -68,8 +68,8 @@ mainLoop c st = do
       if isJust (currentSendingExtra st) && extra == currentSendingExtra st
         then case res of
           Message m -> mainLoop c $ messageSendingState st m
-          p -> do
-            printError p
+          pp -> do
+            printError pp
             mainLoop c $ messageSendFailedState st
         else -- ignore extra, just handle result
         do

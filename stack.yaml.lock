@@ -9,12 +9,12 @@ packages:
     version: 0.1.1.0
     git: https://github.com/mejgun/haskell-tdlib.git
     pantry-tree:
-      size: 220692
-      sha256: f0bc5d20a8455acfd37580ebd14a6320adb9cfc7c2fc812645a554d7c7ef07f1
-    commit: 1ae2be461d3ff5d0eeeadf5a254d97eec66cd039
+      size: 243060
+      sha256: a37d8980de5bc50254c5256b000a14110f1199426bf078587ba1722ba74d92a6
+    commit: 7cade80fe7286ec49cf31dfb5c3a13ebb0f459e2
   original:
     git: https://github.com/mejgun/haskell-tdlib.git
-    commit: 1ae2be461d3ff5d0eeeadf5a254d97eec66cd039
+    commit: 7cade80fe7286ec49cf31dfb5c3a13ebb0f459e2
 snapshots:
 - completed:
     size: 587546
