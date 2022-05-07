@@ -5,27 +5,27 @@ module Main
   )
 where
 
-import API.AuthorizationState
-import qualified API.FormattedText as FT
-import API.Functions.CheckAuthenticationBotToken
-import API.Functions.CheckDatabaseEncryptionKey
-import qualified API.Functions.SendMessage as SM
-import API.Functions.SetLogVerbosityLevel
-import API.Functions.SetTdlibParameters
-import API.GeneralResult
-import qualified API.InputMessageContent as IMC
-import qualified API.Message as M
-import qualified API.Update as U
 import Data.Aeson
 import Data.Maybe
   ( fromJust,
     isJust,
     isNothing,
   )
-import Defaults
 import Lib
 import System.Directory (removeFile)
-import TDLib
+import TD.Data.AuthorizationState
+import qualified TD.Data.FormattedText as FT
+import TD.Data.GeneralResult
+import qualified TD.Data.InputMessageContent as IMC
+import qualified TD.Data.Message as M
+import qualified TD.Data.Update as U
+import TD.Defaults
+import TD.Lib
+import TD.Query.CheckAuthenticationBotToken
+import TD.Query.CheckDatabaseEncryptionKey
+import qualified TD.Query.SendMessage as SM
+import TD.Query.SetLogVerbosityLevel
+import TD.Query.SetTdlibParameters
 
 data State = State
   { currentSendingExtra :: Maybe String,
