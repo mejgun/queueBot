@@ -39,6 +39,7 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - queueBot
+    
 tests:
   queueBot-test:
     main:                Spec.hs
