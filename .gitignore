@@ -6,4 +6,5 @@
 queueBot-exe
 /Dockerfile
 *~
+hie*yaml*
 docker-build.bash

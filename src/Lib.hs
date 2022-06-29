@@ -10,8 +10,8 @@ module Lib
   )
 where
 
-import Data.Aeson
-import GHC.Generics
+import Data.Aeson (FromJSON, ToJSON)
+import GHC.Generics (Generic)
 import System.Directory (listDirectory)
 
 data Q = Q
@@ -27,6 +27,4 @@ instance ToJSON Q
 instance FromJSON Q
 
 getQueue :: String -> IO [FilePath]
-getQueue d = do
-  let a = listDirectory d
-  map (d ++) <$> a
+getQueue d = map (d ++) <$> listDirectory d

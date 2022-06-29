@@ -1,16 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_GHC -W -Wall -Werror #-}
 
-module Main
-  ( main,
-  )
-where
+module Main (main) where
 
-import Data.Aeson
-import Data.Maybe
-  ( fromJust,
-    isJust,
-    isNothing,
-  )
+import Data.Aeson (decodeFileStrict)
 import Lib
 import System.Directory (removeFile)
 import TD.Data.AuthorizationState
@@ -19,7 +12,7 @@ import TD.Data.GeneralResult
 import qualified TD.Data.InputMessageContent as IMC
 import qualified TD.Data.Message as M
 import qualified TD.Data.Update as U
-import TD.Defaults
+import TD.Defaults (defaultTdlibParameters)
 import TD.Lib
 import TD.Query.CheckAuthenticationBotToken
 import TD.Query.CheckDatabaseEncryptionKey
@@ -27,11 +20,18 @@ import qualified TD.Query.SendMessage as SM
 import TD.Query.SetLogVerbosityLevel
 import TD.Query.SetTdlibParameters
 
-data State = State
-  { currentSendingExtra :: Maybe String,
-    currentSendingMessage :: Maybe M.Message,
-    queue :: [FilePath],
-    currentItem :: Maybe FilePath
+type Extra = String
+
+data Status
+  = Empty
+  | WaitMsg Extra FilePath
+  | WaitMsgSending M.Message FilePath
+  deriving (Show, Eq)
+
+data BotState = BotState
+  { client :: Client,
+    status :: Status,
+    queue :: [FilePath]
   }
   deriving (Show)
 
@@ -40,76 +40,79 @@ queueDir = "./queue/"
 
 main :: IO ()
 main = do
-  client <- create
-  send client SetLogVerbosityLevel {new_verbosity_level = Just 2}
-  mainLoop client emptyState
+  cl <- create
+  send cl SetLogVerbosityLevel {new_verbosity_level = Just 2}
+  mainLoop $ BotState {client = cl, queue = [], status = Empty}
 
-mainLoop :: Client -> State -> IO ()
-mainLoop c st = do
-  r <- receive c
+mainLoop :: BotState -> IO ()
+mainLoop st = do
+  r <- receive $client st
   case r of
     -- no msg from tdlib. check if we sending someting already
     -- if not, update queue or send first message
     Nothing ->
-      if isNothing (currentSendingExtra st)
-        && isNothing (currentSendingMessage st)
-        then case queue st of
-          [] -> do
-            q <- getQueue queueDir
-            mainLoop c $ newQueueState st q
-          (q : qs) -> do
-            newSt <- sendMsg c q st
-            mainLoop c $ newQueueState newSt qs
-        else mainLoop c st
+      if status st == Empty
+        then handleQueue (queue st)
+        else mainLoop st
     -- new message from tdlib
     Just (ResultWithExtra res extra) -> do
       print res
-      -- have extra and it is eq to currentSendingExtra
-      if isJust (currentSendingExtra st) && extra == currentSendingExtra st
-        then case res of
-          Message m -> mainLoop c $ messageSendingState st m
-          pp -> do
-            printError pp
-            mainLoop c $ messageSendFailedState st
-        else -- ignore extra, just handle result
-        do
-          newSt <- handleResult res c st
-          mainLoop c newSt
+      newSt <- handleResultAndExtra res extra st
+      mainLoop newSt
+  where
+    handleQueue :: [FilePath] -> IO ()
+    handleQueue [] = do
+      q <- getQueue queueDir
+      mainLoop $ newQueueState st q
+    handleQueue (q : qs) = do
+      newSt <- handleMsg q
+      mainLoop $ newQueueState newSt qs
 
-sendMsg :: Client -> FilePath -> State -> IO State
-sendMsg c q st = do
-  j <- decodeFileStrict q :: IO (Maybe Q)
-  case j of
-    Nothing -> return st
-    Just msg -> do
-      extra <- handleQeueueMessage msg c
-      return $ messageCreatingState st extra q
+    handleMsg :: FilePath -> IO BotState
+    handleMsg f = do
+      j <- decodeFileStrict f :: IO (Maybe Q)
+      case j of
+        Nothing -> return st
+        Just msg -> handleQeueueMessage f msg
+
+    handleQeueueMessage :: FilePath -> Q -> IO BotState
+    handleQeueueMessage f msg = case method msg of
+      "sendText" -> do
+        xtr <- sendWExtra (client st) $ sendTextMsg (chat_id msg) (caption msg)
+        pure $ st {status = WaitMsg xtr f}
+      _ -> do
+        printError ("cannot parse" :: String)
+        printError msg
+        pure st
 
 printError :: (Show a) => a -> IO ()
 printError e = putStrLn "ERROR:" >> print e
 
-handleResult :: GeneralResult -> Client -> State -> IO State
-handleResult (Update (U.UpdateAuthorizationState {U.authorization_state = s})) c st =
-  handleAuthState c s >> return st
-handleResult (Update (U.UpdateMessageSendFailed {U.old_message_id = oldID})) _ st =
-  return $
-    if isMessageIdEqualToId (currentSendingMessage st) oldID
-      then messageSendFailedState st
-      else st
-handleResult (Update (U.UpdateMessageSendSucceeded {U.old_message_id = oldID})) _ st =
-  if isMessageIdEqualToId (currentSendingMessage st) oldID
-    then
-      removeFile (fromJust (currentItem st))
-        >> return (messageSendSuccessState st)
-    else return st
-handleResult _ _ st = return st
-
-isMessageIdEqualToId :: Maybe M.Message -> Maybe Int -> Bool
-isMessageIdEqualToId Nothing _ = False
-isMessageIdEqualToId m mid =
-  let mID = M._id =<< m
-      Just t = (==) <$> mID <*> mid
-   in t
+handleResultAndExtra :: GeneralResult -> Maybe Extra -> BotState -> IO BotState
+handleResultAndExtra
+  (Update U.UpdateAuthorizationState {U.authorization_state = s})
+  _
+  st =
+    handleAuthState (client st) s >> pure st
+handleResultAndExtra
+  (Message m)
+  (Just extra1)
+  st@(BotState _ (WaitMsg extra2 f) _)
+    | extra1 == extra2 =
+      pure $ st {status = WaitMsgSending m f}
+handleResultAndExtra
+  (Update U.UpdateMessageSendFailed {U.old_message_id = oldID})
+  _
+  st@(BotState _ (WaitMsgSending M.Message {M._id = mId} f) _)
+    | oldID == mId = pure $ st {status = Empty, queue = queue st ++ [f]}
+handleResultAndExtra
+  (Update U.UpdateMessageSendSucceeded {U.old_message_id = oldID})
+  _
+  st@(BotState _ (WaitMsgSending M.Message {M._id = mId} f) _)
+    | oldID == mId = do
+      removeFile f
+      pure $ st {status = Empty}
+handleResultAndExtra _ _ _ = undefined
 
 handleAuthState :: Client -> Maybe AuthorizationState -> IO ()
 handleAuthState c s = do
@@ -126,50 +129,8 @@ handleAuthState c s = do
       send c CheckAuthenticationBotToken {token = Just t}
     _ -> return ()
 
-handleQeueueMessage :: Q -> Client -> IO String
-handleQeueueMessage msg c = case method msg of
-  "sendText" -> sendWExtra c $ sendTextMsg (chat_id msg) (caption msg)
-  _ -> fail "Cannot match"
-
-emptyState :: State
-emptyState =
-  State
-    { currentSendingExtra = Nothing,
-      currentSendingMessage = Nothing,
-      queue = [],
-      currentItem = Nothing
-    }
-
-messageCreatingState :: State -> String -> FilePath -> State
-messageCreatingState st extra curItem =
-  st
-    { currentSendingMessage = Nothing,
-      currentSendingExtra = Just extra,
-      currentItem = Just curItem
-    }
-
-messageSendingState :: State -> M.Message -> State
-messageSendingState st m =
-  st {currentSendingMessage = Just m, currentSendingExtra = Nothing}
-
-newQueueState :: State -> [FilePath] -> State
+newQueueState :: BotState -> [FilePath] -> BotState
 newQueueState st q = st {queue = q}
-
-messageSendFailedState :: State -> State
-messageSendFailedState st =
-  st
-    { currentSendingMessage = Nothing,
-      currentSendingExtra = Nothing,
-      currentItem = Nothing
-    }
-
-messageSendSuccessState :: State -> State
-messageSendSuccessState st =
-  st
-    { currentSendingMessage = Nothing,
-      currentSendingExtra = Nothing,
-      currentItem = Nothing
-    }
 
 sendTextMsg :: Int -> String -> SM.SendMessage
 sendTextMsg cID text =
