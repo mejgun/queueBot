@@ -89,22 +89,26 @@ printError :: (Show a) => a -> IO ()
 printError e = putStrLn "ERROR:" >> print e
 
 handleResultAndExtra :: GeneralResult -> Maybe Extra -> BotState -> IO BotState
+-- auth msg
 handleResultAndExtra
   (Update U.UpdateAuthorizationState {U.authorization_state = s})
   _
   st =
     handleAuthState (client st) s >> pure st
+-- message sending start
 handleResultAndExtra
   (Message m)
   (Just extra1)
   st@(BotState _ (WaitMsg extra2 f) _)
     | extra1 == extra2 =
       pure $ st {status = WaitMsgSending m f}
+-- message sending failed
 handleResultAndExtra
   (Update U.UpdateMessageSendFailed {U.old_message_id = oldID})
   _
   st@(BotState _ (WaitMsgSending M.Message {M._id = mId} f) _)
     | oldID == mId = pure $ st {status = Empty, queue = queue st ++ [f]}
+-- message sending succeeded
 handleResultAndExtra
   (Update U.UpdateMessageSendSucceeded {U.old_message_id = oldID})
   _
@@ -112,7 +116,8 @@ handleResultAndExtra
     | oldID == mId = do
       removeFile f
       pure $ st {status = Empty}
-handleResultAndExtra _ _ _ = undefined
+-- uknown msg. ignoring
+handleResultAndExtra _ _ st = pure st
 
 handleAuthState :: Client -> Maybe AuthorizationState -> IO ()
 handleAuthState c s = do
