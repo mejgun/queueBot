@@ -16,7 +16,7 @@ import System.Directory (listDirectory)
 
 data Q = Q
   { method :: String,
-    caption :: String,
+    caption :: Maybe String,
     chat_id :: Int,
     file :: Maybe String
   }

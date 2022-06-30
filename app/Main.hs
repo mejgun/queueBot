@@ -4,19 +4,25 @@
 module Main (main) where
 
 import Data.Aeson (decodeFileStrict)
+import Data.Maybe (fromMaybe)
 import Lib
 import System.Directory (removeFile)
 import TD.Data.AuthorizationState
+import qualified TD.Data.Error as Error
 import qualified TD.Data.FormattedText as FT
 import TD.Data.GeneralResult
+import qualified TD.Data.InputChatPhoto as ICP
+import qualified TD.Data.InputFile as IF
 import qualified TD.Data.InputMessageContent as IMC
 import qualified TD.Data.Message as M
+import qualified TD.Data.Ok as Ok
 import qualified TD.Data.Update as U
 import TD.Defaults (defaultTdlibParameters)
 import TD.Lib
 import TD.Query.CheckAuthenticationBotToken
 import TD.Query.CheckDatabaseEncryptionKey
 import qualified TD.Query.SendMessage as SM
+import qualified TD.Query.SetChatPhoto as SCP
 import TD.Query.SetLogVerbosityLevel
 import TD.Query.SetTdlibParameters
 
@@ -24,8 +30,9 @@ type Extra = String
 
 data Status
   = Empty
-  | WaitMsg Extra FilePath
+  | WaitSendMsg Extra FilePath
   | WaitMsgSending M.Message FilePath
+  | WaitSetChatPhoto Extra FilePath
   deriving (Show, Eq)
 
 data BotState = BotState
@@ -73,17 +80,24 @@ mainLoop st = do
       j <- decodeFileStrict f :: IO (Maybe Q)
       case j of
         Nothing -> return st
-        Just msg -> handleQeueueMessage f msg
+        Just msg -> handleQeueueMessage st f msg
 
-    handleQeueueMessage :: FilePath -> Q -> IO BotState
-    handleQeueueMessage f msg = case method msg of
-      "sendText" -> do
-        xtr <- sendWExtra (client st) $ sendTextMsg (chat_id msg) (caption msg)
-        pure $ st {status = WaitMsg xtr f}
-      _ -> do
-        printError ("cannot parse" :: String)
-        printError msg
-        pure st
+handleQeueueMessage :: BotState -> FilePath -> Q -> IO BotState
+handleQeueueMessage st f msg = case method msg of
+  "sendText" -> do
+    xtr <-
+      sendWExtra (client st) $
+        sendTextMsg (chat_id msg) (fromMaybe "defaultText" (caption msg))
+    pure $ st {status = WaitSendMsg xtr f}
+  "setChatPhotoFromFile" -> do
+    xtr <-
+      sendWExtra (client st) $
+        setChatFotoFromFile (chat_id msg) (fromMaybe "noDefault" (file msg))
+    pure $ st {status = WaitSetChatPhoto xtr f}
+  _ -> do
+    printError ("cannot parse" :: String)
+    printError msg
+    pure st
 
 printError :: (Show a) => a -> IO ()
 printError e = putStrLn "ERROR:" >> print e
@@ -99,7 +113,7 @@ handleResultAndExtra
 handleResultAndExtra
   (Message m)
   (Just extra1)
-  st@(BotState _ (WaitMsg extra2 f) _)
+  st@(BotState _ (WaitSendMsg extra2 f) _)
     | extra1 == extra2 =
       pure $ st {status = WaitMsgSending m f}
 -- message sending failed
@@ -117,6 +131,26 @@ handleResultAndExtra
   st@(BotState _ (WaitMsgSending M.Message {M._id = mId} f) _)
     | oldID == mId = do
       removeFile f
+      pure $ st {status = Empty}
+-- set chat photo successful
+-- removing queue file
+handleResultAndExtra
+  (Ok Ok.Ok)
+  (Just extra1)
+  st@(BotState _ (WaitSendMsg extra2 f) _)
+    | extra1 == extra2 = do
+      removeFile f
+      pure $ st {status = Empty}
+-- set chat photo failed
+-- keep queue file
+handleResultAndExtra
+  (Error (Error.Error text code))
+  (Just extra1)
+  st@(BotState _ (WaitSendMsg extra2 _) _)
+    | extra1 == extra2 = do
+      putStrLn "Cannot set chat photo"
+      printError text
+      printError code
       pure $ st {status = Empty}
 -- uknown msg. ignoring
 handleResultAndExtra _ _ st = pure st
@@ -154,6 +188,21 @@ sendTextMsg cID text =
                   FT.FormattedText
                     { FT.text = Just text,
                       FT.entities = Nothing
+                    }
+            }
+    }
+
+setChatFotoFromFile :: Int -> FilePath -> SCP.SetChatPhoto
+setChatFotoFromFile cID path =
+  SCP.SetChatPhoto
+    { SCP.chat_id = Just cID,
+      SCP.photo =
+        Just
+          ICP.InputChatPhotoStatic
+            { ICP.photo =
+                Just
+                  IF.InputFileLocal
+                    { IF.path = Just path
                     }
             }
     }
