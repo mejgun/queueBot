@@ -137,7 +137,7 @@ handleResultAndExtra
 handleResultAndExtra
   (Ok Ok.Ok)
   (Just extra1)
-  st@(BotState _ (WaitSendMsg extra2 f) _)
+  st@(BotState _ (WaitSetChatPhoto extra2 f) _)
     | extra1 == extra2 = do
       removeFile f
       pure $ st {status = Empty}
