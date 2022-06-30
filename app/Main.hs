@@ -63,10 +63,10 @@ mainLoop st = do
     handleQueue :: [FilePath] -> IO ()
     handleQueue [] = do
       q <- getQueue queueDir
-      mainLoop $ newQueueState st q
+      mainLoop $ st {queue = q}
     handleQueue (q : qs) = do
       newSt <- handleMsg q
-      mainLoop $ newQueueState newSt qs
+      mainLoop $ newSt {queue = qs}
 
     handleMsg :: FilePath -> IO BotState
     handleMsg f = do
@@ -103,12 +103,14 @@ handleResultAndExtra
     | extra1 == extra2 =
       pure $ st {status = WaitMsgSending m f}
 -- message sending failed
+-- keeping queue file, it will be re-added on next scan
 handleResultAndExtra
   (Update U.UpdateMessageSendFailed {U.old_message_id = oldID})
   _
-  st@(BotState _ (WaitMsgSending M.Message {M._id = mId} f) _)
-    | oldID == mId = pure $ st {status = Empty, queue = queue st ++ [f]}
+  st@(BotState _ (WaitMsgSending M.Message {M._id = mId} _) _)
+    | oldID == mId = pure $ st {status = Empty}
 -- message sending succeeded
+-- removing queue file
 handleResultAndExtra
   (Update U.UpdateMessageSendSucceeded {U.old_message_id = oldID})
   _
@@ -133,9 +135,6 @@ handleAuthState c s = do
       t <- getLine
       send c CheckAuthenticationBotToken {token = Just t}
     _ -> return ()
-
-newQueueState :: BotState -> [FilePath] -> BotState
-newQueueState st q = st {queue = q}
 
 sendTextMsg :: Int -> String -> SM.SendMessage
 sendTextMsg cID text =
