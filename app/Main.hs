@@ -109,13 +109,24 @@ handleResultAndExtra
   _
   st =
     handleAuthState (client st) s >> pure st
--- message sending start
+-- message sending started
 handleResultAndExtra
   (Message m)
   (Just extra1)
   st@(BotState _ (WaitSendMsg extra2 f) _)
     | extra1 == extra2 =
       pure $ st {status = WaitMsgSending m f}
+-- message sending not started
+-- keep queue file
+handleResultAndExtra
+  (Error (Error.Error text code))
+  (Just extra1)
+  st@(BotState _ (WaitSendMsg extra2 _) _)
+    | extra1 == extra2 = do
+      putStrLn "Cannot start sending message"
+      printError text
+      printError code
+      pure $ st {status = Empty}
 -- message sending failed
 -- keeping queue file, it will be re-added on next scan
 handleResultAndExtra
