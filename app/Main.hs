@@ -15,12 +15,16 @@ import qualified TD.Data.InputChatPhoto as ICP
 import qualified TD.Data.InputFile as IF
 import qualified TD.Data.InputMessageContent as IMC
 import qualified TD.Data.Message as M
+import qualified TD.Data.MessageContent as MC
+import qualified TD.Data.MessageSender as MS
 import qualified TD.Data.Ok as Ok
+import qualified TD.Data.OptionValue as OV
 import qualified TD.Data.Update as U
 import TD.Defaults (defaultTdlibParameters)
 import TD.Lib
 import TD.Query.CheckAuthenticationBotToken
 import TD.Query.CheckDatabaseEncryptionKey
+import qualified TD.Query.DeleteMessages as DM
 import qualified TD.Query.SendMessage as SM
 import qualified TD.Query.SetChatPhoto as SCP
 import TD.Query.SetLogVerbosityLevel
@@ -38,7 +42,8 @@ data Status
 data BotState = BotState
   { client :: Client,
     status :: Status,
-    queue :: [FilePath]
+    queue :: [FilePath],
+    myId :: Maybe Int
   }
   deriving (Show)
 
@@ -49,7 +54,7 @@ main :: IO ()
 main = do
   cl <- create
   send cl SetLogVerbosityLevel {new_verbosity_level = Just 2}
-  mainLoop $ BotState {client = cl, queue = [], status = Empty}
+  mainLoop $ BotState {client = cl, queue = [], status = Empty, myId = Nothing}
 
 mainLoop :: BotState -> IO ()
 mainLoop st = do
@@ -109,11 +114,21 @@ handleResultAndExtra
   _
   st =
     handleAuthState (client st) s >> pure st
+-- update options
+handleResultAndExtra
+  ( Update
+      U.UpdateOption
+        { U.name = Just "my_id",
+          U.value = Just OV.OptionValueInteger {OV._value = val}
+        }
+    )
+  _
+  st = pure st {myId = val}
 -- message sending started
 handleResultAndExtra
   (Message m)
   (Just extra1)
-  st@(BotState _ (WaitSendMsg extra2 f) _)
+  st@(BotState _ (WaitSendMsg extra2 f) _ _)
     | extra1 == extra2 =
       pure $ st {status = WaitMsgSending m f}
 -- message sending not started
@@ -121,7 +136,7 @@ handleResultAndExtra
 handleResultAndExtra
   (Error (Error.Error text code))
   (Just extra1)
-  st@(BotState _ (WaitSendMsg extra2 _) _)
+  st@(BotState _ (WaitSendMsg extra2 _) _ _)
     | extra1 == extra2 = do
       putStrLn "Cannot start sending message"
       printError text
@@ -132,14 +147,14 @@ handleResultAndExtra
 handleResultAndExtra
   (Update U.UpdateMessageSendFailed {U.old_message_id = oldID})
   _
-  st@(BotState _ (WaitMsgSending M.Message {M._id = mId} _) _)
+  st@(BotState _ (WaitMsgSending M.Message {M._id = mId} _) _ _)
     | oldID == mId = pure $ st {status = Empty}
 -- message sending succeeded
 -- removing queue file
 handleResultAndExtra
   (Update U.UpdateMessageSendSucceeded {U.old_message_id = oldID})
   _
-  st@(BotState _ (WaitMsgSending M.Message {M._id = mId} f) _)
+  st@(BotState _ (WaitMsgSending M.Message {M._id = mId} f) _ _)
     | oldID == mId = do
       removeFile f
       pure $ st {status = Empty}
@@ -148,7 +163,7 @@ handleResultAndExtra
 handleResultAndExtra
   (Ok Ok.Ok)
   (Just extra1)
-  st@(BotState _ (WaitSetChatPhoto extra2 f) _)
+  st@(BotState _ (WaitSetChatPhoto extra2 f) _ _)
     | extra1 == extra2 = do
       removeFile f
       pure $ st {status = Empty}
@@ -157,11 +172,32 @@ handleResultAndExtra
 handleResultAndExtra
   (Error (Error.Error text code))
   (Just extra1)
-  st@(BotState _ (WaitSetChatPhoto extra2 _) _)
+  st@(BotState _ (WaitSetChatPhoto extra2 _) _ _)
     | extra1 == extra2 = do
       putStrLn "Cannot set chat photo"
       printError text
       printError code
+      pure $ st {status = Empty}
+-- update new chat photo
+-- delete this msg at any bot state
+-- don't care about result
+handleResultAndExtra
+  ( Update
+      U.UpdateNewMessage
+        { U.message =
+            Just
+              M.Message
+                { M.content = Just MC.MessageChatChangePhoto {},
+                  M.sender_id = Just MS.MessageSenderUser {MS.user_id = Just uId},
+                  M.chat_id = Just cId,
+                  M._id = Just mId
+                }
+        }
+    )
+  _
+  st@(BotState _ _ _ (Just botId))
+    | botId == uId = do
+      _ <- sendWExtra (client st) $ deleteMessages cId [mId]
       pure $ st {status = Empty}
 -- uknown msg. ignoring
 handleResultAndExtra _ _ st = pure st
@@ -217,3 +253,6 @@ setChatFotoFromFile cID path =
                     }
             }
     }
+
+deleteMessages :: Int -> [Int] -> DM.DeleteMessages
+deleteMessages cID msgs = DM.DeleteMessages (Just True) (Just msgs) (Just cID)
