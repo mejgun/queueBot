@@ -53,7 +53,7 @@ main = do
 
 mainLoop :: BotState -> IO ()
 mainLoop st = do
-  r <- receive $client st
+  r <- receive $ client st
   case r of
     -- no msg from tdlib. check if we sending someting already
     -- if not, update queue or send first message
@@ -146,7 +146,7 @@ handleResultAndExtra
 handleResultAndExtra
   (Error (Error.Error text code))
   (Just extra1)
-  st@(BotState _ (WaitSendMsg extra2 _) _)
+  st@(BotState _ (WaitSetChatPhoto extra2 _) _)
     | extra1 == extra2 = do
       putStrLn "Cannot set chat photo"
       printError text
