@@ -15,8 +15,8 @@ import qualified TD.Data.InputChatPhoto as ICP
 import qualified TD.Data.InputFile as IF
 import qualified TD.Data.InputMessageContent as IMC
 import qualified TD.Data.Message as M
-import qualified TD.Data.MessageContent as MC
-import qualified TD.Data.MessageSender as MS
+-- import qualified TD.Data.MessageContent as MC
+-- import qualified TD.Data.MessageSender as MS
 import qualified TD.Data.Ok as Ok
 import qualified TD.Data.OptionValue as OV
 import qualified TD.Data.Update as U
@@ -24,7 +24,7 @@ import TD.Defaults (defaultTdlibParameters)
 import TD.Lib
 import TD.Query.CheckAuthenticationBotToken
 import TD.Query.CheckDatabaseEncryptionKey
-import qualified TD.Query.DeleteMessages as DM
+-- import qualified TD.Query.DeleteMessages as DM
 import qualified TD.Query.SendMessage as SM
 import qualified TD.Query.SetChatPhoto as SCP
 import TD.Query.SetLogVerbosityLevel
@@ -181,6 +181,7 @@ handleResultAndExtra
 -- update new chat photo
 -- delete this msg at any bot state
 -- don't care about result
+{-
 handleResultAndExtra
   ( Update
       U.UpdateNewMessage
@@ -199,6 +200,7 @@ handleResultAndExtra
     | botId == uId = do
       _ <- sendWExtra (client st) $ deleteMessages cId [mId]
       pure $ st {status = Empty}
+      -}
 -- uknown msg. ignoring
 handleResultAndExtra _ _ st = pure st
 
@@ -254,5 +256,5 @@ setChatFotoFromFile cID path =
             }
     }
 
-deleteMessages :: Int -> [Int] -> DM.DeleteMessages
-deleteMessages cID msgs = DM.DeleteMessages (Just True) (Just msgs) (Just cID)
+-- deleteMessages :: Int -> [Int] -> DM.DeleteMessages
+-- deleteMessages cID msgs = DM.DeleteMessages (Just True) (Just msgs) (Just cID)
