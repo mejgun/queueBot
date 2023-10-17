@@ -12,6 +12,7 @@ import Handler.Option qualified as Option
 import Lib
   ( BotState (..),
     QItem (caption, chat_id, method),
+    Queue,
     Status (Ready, WaitingChat, WaitingMessageACK),
     emptyQueue,
     headQueue,
@@ -27,8 +28,7 @@ import TD.Data.Update qualified as U
 import TD.GeneralResult
   ( GeneralResult (Chat, Error, Message, Update),
   )
-import TD.Lib (create, receive, send, sendWExtra)
-import TD.Lib.Internal (Extra)
+import TD.Lib (Extra, ShortShow (..), create, receive, send, sendWExtra)
 import TD.Query.GetChat (GetChat (..))
 import TD.Query.SendMessage qualified as SM
 import TD.Query.SetLogVerbosityLevel
@@ -65,19 +65,19 @@ mainLoop st = do
         else mainLoop st
     -- new message from tdlib
     Just (res, extra) -> do
-      print res
+      putStrLn $ shortShow res
       hFlush stdout
       newSt <- handleAnswer res extra st
       mainLoop newSt
   where
-    -- handleQueue :: [(Q, FilePath)] -> IO ()
+    handleQueue :: Queue -> IO ()
     handleQueue q =
       case headQueue q of
-        (Just m) -> handleQeueueMessage st m >>= mainLoop
+        (Just m) -> handleQueueMessage st m >>= mainLoop
         Nothing -> updateQueue >>= \xs -> mainLoop $ st {queue = xs}
 
-handleQeueueMessage :: BotState -> QItem -> IO BotState
-handleQeueueMessage st msg = case msg.method of
+handleQueueMessage :: BotState -> QItem -> IO BotState
+handleQueueMessage st msg = case msg.method of
   "sendText" -> do
     if msg.chat_id `elem` st.chats
       then do

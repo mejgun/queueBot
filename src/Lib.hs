@@ -18,7 +18,6 @@ import Data.Text qualified as T
 import GHC.Generics (Generic)
 import System.Directory (listDirectory, removeFile)
 import TD.Lib
-import TD.Lib.Internal (Extra)
 
 data Status
   = Ready
