@@ -5,7 +5,7 @@
 
 packages:
 - completed:
-    commit: 679aa90ebc46148ca6fd3a889b97e23463c8d9de
+    commit: 3398e9e7a9f648302eab7ed540c21dca5260dc17
     git: https://github.com/mejgun/haskell-tdlib.git
     name: haskell-tdlib
     pantry-tree:
@@ -13,7 +13,7 @@ packages:
       size: 78459
     version: 2.0.0.0
   original:
-    commit: 679aa90ebc46148ca6fd3a889b97e23463c8d9de
+    commit: 3398e9e7a9f648302eab7ed540c21dca5260dc17
     git: https://github.com/mejgun/haskell-tdlib.git
 snapshots:
 - completed:
