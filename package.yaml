@@ -19,18 +19,39 @@ extra-source-files:
 # common to point users to the README.md file.
 description:         Please see the README on GitHub at <https://github.com/githubuser/queueBot#readme>
 
+ghc-options:
+- -W
+- -Werror
+- -Wall
+- -Wcompat
+- -Widentities
+- -Wincomplete-record-updates
+- -Wincomplete-uni-patterns
+- -Wmissing-export-lists
+- -Wmissing-home-modules
+- -Wno-partial-fields
+- -Wredundant-constraints
+
 dependencies:
 - base >= 4.7 && < 5
 - directory
 - aeson
+- text
 - haskell-tdlib
 
-
 library:
+  language:    GHC2021
   source-dirs: src
+  default-extensions:
+  - DuplicateRecordFields
+  - NoFieldSelectors
+  - OverloadedStrings
+  - OverloadedRecordDot
+  - LambdaCase
 
 executables:
   queueBot-exe:
+    language:    GHC2021
     main:                Main.hs
     source-dirs:         app
     ghc-options: 
@@ -39,7 +60,13 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - queueBot
-    
+    default-extensions:
+    - DuplicateRecordFields
+    - NoFieldSelectors
+    - OverloadedStrings
+    - OverloadedRecordDot
+    - LambdaCase
+
 tests:
   queueBot-test:
     main:                Spec.hs

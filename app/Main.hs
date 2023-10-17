@@ -1,260 +1,133 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# OPTIONS_GHC -W -Wall -Werror #-}
+-- {-# OPTIONS_GHC -W -Wall -Werror #-}
 
 module Main (main) where
 
-import Data.Aeson (decodeFileStrict)
 import Data.Maybe (fromMaybe)
+import Data.Text qualified as T
+import Handler.Auth qualified as Auth
+import Handler.Chat qualified as Chat
+import Handler.Error qualified as Error
+import Handler.Message qualified as Message
+import Handler.Option qualified as Option
 import Lib
-import System.Directory (removeFile)
-import TD.Data.AuthorizationState
-import qualified TD.Data.Error as Error
-import qualified TD.Data.FormattedText as FT
-import TD.Data.GeneralResult
-import qualified TD.Data.InputChatPhoto as ICP
-import qualified TD.Data.InputFile as IF
-import qualified TD.Data.InputMessageContent as IMC
-import qualified TD.Data.Message as M
--- import qualified TD.Data.MessageContent as MC
--- import qualified TD.Data.MessageSender as MS
-import qualified TD.Data.Ok as Ok
-import qualified TD.Data.OptionValue as OV
-import qualified TD.Data.Update as U
-import TD.Defaults (defaultTdlibParameters)
-import TD.Lib
-import TD.Query.CheckAuthenticationBotToken
-import TD.Query.CheckDatabaseEncryptionKey
--- import qualified TD.Query.DeleteMessages as DM
-import qualified TD.Query.SendMessage as SM
-import qualified TD.Query.SetChatPhoto as SCP
+  ( BotState (..),
+    QItem (caption, chat_id, method),
+    Status (Ready, WaitingChat, WaitingMessageACK),
+    emptyQueue,
+    headQueue,
+    updateQueue,
+  )
+import System.Directory.Internal.Prelude (getArgs)
+import System.IO (hFlush, stdout)
+import TD.Data.FormattedText qualified as FT
+import TD.Data.InputMessageContent (InputMessageContent (disable_web_page_preview))
+import TD.Data.InputMessageContent qualified as IMC
+import TD.Data.Update (Update (UpdateNewChat))
+import TD.Data.Update qualified as U
+import TD.GeneralResult
+  ( GeneralResult (Chat, Error, Message, Update),
+  )
+import TD.Lib (create, receive, send, sendWExtra)
+import TD.Lib.Internal (Extra)
+import TD.Query.GetChat (GetChat (..))
+import TD.Query.SendMessage qualified as SM
 import TD.Query.SetLogVerbosityLevel
-import TD.Query.SetTdlibParameters
-
-type Extra = String
-
-data Status
-  = Empty
-  | WaitSendMsg Extra FilePath
-  | WaitMsgSending M.Message FilePath
-  | WaitSetChatPhoto Extra FilePath
-  deriving (Show, Eq)
-
-data BotState = BotState
-  { client :: Client,
-    status :: Status,
-    queue :: [FilePath],
-    myId :: Maybe Int
-  }
-  deriving (Show)
-
-queueDir :: String
-queueDir = "./queue/"
+  ( SetLogVerbosityLevel (SetLogVerbosityLevel, new_verbosity_level),
+  )
 
 main :: IO ()
 main = do
-  cl <- create
-  send cl SetLogVerbosityLevel {new_verbosity_level = Just 2}
-  mainLoop $ BotState {client = cl, queue = [], status = Empty, myId = Nothing}
+  getArgs >>= \case
+    [apiid, apihash] -> do
+      cl <- create
+      send cl SetLogVerbosityLevel {new_verbosity_level = Just 2}
+      mainLoop $
+        BotState
+          { client = cl,
+            queue = emptyQueue,
+            status = Ready,
+            chats = [],
+            myId = Nothing,
+            apiid = read apiid,
+            apihash = T.pack apihash
+          }
+    _ -> putStrLn "run as ./app api_id api_hash"
 
 mainLoop :: BotState -> IO ()
 mainLoop st = do
-  r <- receive $ client st
+  r <- receive st.client
   case r of
     -- no msg from tdlib. check if we sending someting already
     -- if not, update queue or send first message
     Nothing ->
-      if status st == Empty
-        then handleQueue (queue st)
+      if st.status == Ready
+        then handleQueue st.queue
         else mainLoop st
     -- new message from tdlib
-    Just (ResultWithExtra res extra) -> do
+    Just (res, extra) -> do
       print res
-      newSt <- handleResultAndExtra res extra st
+      hFlush stdout
+      newSt <- handleAnswer res extra st
       mainLoop newSt
   where
-    handleQueue :: [FilePath] -> IO ()
-    handleQueue [] = do
-      q <- getQueue queueDir
-      mainLoop $ st {queue = q}
-    handleQueue (q : qs) = do
-      newSt <- handleMsg q
-      mainLoop $ newSt {queue = qs}
+    -- handleQueue :: [(Q, FilePath)] -> IO ()
+    handleQueue q =
+      case headQueue q of
+        (Just m) -> handleQeueueMessage st m >>= mainLoop
+        Nothing -> updateQueue >>= \xs -> mainLoop $ st {queue = xs}
 
-    handleMsg :: FilePath -> IO BotState
-    handleMsg f = do
-      j <- decodeFileStrict f :: IO (Maybe Q)
-      case j of
-        Nothing -> return st
-        Just msg -> handleQeueueMessage st f msg
-
-handleQeueueMessage :: BotState -> FilePath -> Q -> IO BotState
-handleQeueueMessage st f msg = case method msg of
+handleQeueueMessage :: BotState -> QItem -> IO BotState
+handleQeueueMessage st msg = case msg.method of
   "sendText" -> do
-    xtr <-
-      sendWExtra (client st) $
-        sendTextMsg (chat_id msg) (fromMaybe "defaultText" (caption msg))
-    pure $ st {status = WaitSendMsg xtr f}
-  "setChatPhotoFromFile" -> do
-    xtr <-
-      sendWExtra (client st) $
-        setChatFotoFromFile (chat_id msg) (fromMaybe "noDefault" (file msg))
-    pure $ st {status = WaitSetChatPhoto xtr f}
-  _ -> do
-    printError ("cannot parse" :: String)
-    printError msg
-    pure st
+    if msg.chat_id `elem` st.chats
+      then do
+        xtra <-
+          sendWExtra st.client $
+            sendTextMsg msg.chat_id $
+              fromMaybe "defaultText" msg.caption
+        pure $ st {status = WaitingMessageACK xtra}
+      else do
+        xtra <- sendWExtra st.client $ getChat msg.chat_id
+        pure $ st {status = WaitingChat xtra}
+  _ ->
+    putStrLn ("cannot parse" <> show msg)
+      >> pure st
 
-printError :: (Show a) => a -> IO ()
-printError e = putStrLn "ERROR:" >> print e
-
-handleResultAndExtra :: GeneralResult -> Maybe Extra -> BotState -> IO BotState
--- auth msg
-handleResultAndExtra
-  (Update U.UpdateAuthorizationState {U.authorization_state = s})
-  _
-  st =
-    handleAuthState (client st) s >> pure st
--- update options
-handleResultAndExtra
-  ( Update
-      U.UpdateOption
-        { U.name = Just "my_id",
-          U.value = Just OV.OptionValueInteger {OV._value = val}
-        }
-    )
-  _
-  st = pure st {myId = val}
--- message sending started
-handleResultAndExtra
-  (Message m)
-  (Just extra1)
-  st@(BotState _ (WaitSendMsg extra2 f) _ _)
-    | extra1 == extra2 =
-      pure $ st {status = WaitMsgSending m f}
--- message sending not started
--- keep queue file
-handleResultAndExtra
-  (Error (Error.Error text code))
-  (Just extra1)
-  st@(BotState _ (WaitSendMsg extra2 _) _ _)
-    | extra1 == extra2 = do
-      putStrLn "Cannot start sending message"
-      printError text
-      printError code
-      pure $ st {status = Empty}
--- message sending failed
--- keeping queue file, it will be re-added on next scan
-handleResultAndExtra
-  (Update U.UpdateMessageSendFailed {U.old_message_id = oldID})
-  _
-  st@(BotState _ (WaitMsgSending M.Message {M._id = mId} _) _ _)
-    | oldID == mId = pure $ st {status = Empty}
--- message sending succeeded
--- removing queue file
-handleResultAndExtra
-  (Update U.UpdateMessageSendSucceeded {U.old_message_id = oldID})
-  _
-  st@(BotState _ (WaitMsgSending M.Message {M._id = mId} f) _ _)
-    | oldID == mId = do
-      removeFile f
-      pure $ st {status = Empty}
--- set chat photo successful
--- removing queue file
-handleResultAndExtra
-  (Ok Ok.Ok)
-  (Just extra1)
-  st@(BotState _ (WaitSetChatPhoto extra2 f) _ _)
-    | extra1 == extra2 = do
-      removeFile f
-      pure $ st {status = Empty}
--- set chat photo failed
--- keep queue file
-handleResultAndExtra
-  (Error (Error.Error text code))
-  (Just extra1)
-  st@(BotState _ (WaitSetChatPhoto extra2 _) _ _)
-    | extra1 == extra2 = do
-      putStrLn "Cannot set chat photo"
-      printError text
-      printError code
-      pure $ st {status = Empty}
--- update new chat photo
--- delete this msg at any bot state
--- don't care about result
-{-
-handleResultAndExtra
-  ( Update
-      U.UpdateNewMessage
-        { U.message =
-            Just
-              M.Message
-                { M.content = Just MC.MessageChatChangePhoto {},
-                  M.sender_id = Just MS.MessageSenderUser {MS.user_id = Just uId},
-                  M.chat_id = Just cId,
-                  M._id = Just mId
-                }
-        }
-    )
-  _
-  st@(BotState _ _ _ (Just botId))
-    | botId == uId = do
-      _ <- sendWExtra (client st) $ deleteMessages cId [mId]
-      pure $ st {status = Empty}
-      -}
--- uknown msg. ignoring
-handleResultAndExtra _ _ st = pure st
-
-handleAuthState :: Client -> Maybe AuthorizationState -> IO ()
-handleAuthState c s = do
-  case s of
-    Just AuthorizationStateWaitTdlibParameters ->
-      send c SetTdlibParameters {parameters = Just defaultTdlibParameters}
-    Just (AuthorizationStateWaitEncryptionKey _) ->
-      send
-        c
-        CheckDatabaseEncryptionKey {encryption_key = Just "randomencryption"}
-    Just AuthorizationStateWaitPhoneNumber -> do
-      putStrLn "Enter bot token"
-      t <- getLine
-      send c CheckAuthenticationBotToken {token = Just t}
-    _ -> return ()
+handleAnswer :: GeneralResult -> Maybe Extra -> BotState -> IO BotState
+handleAnswer (Update U.UpdateAuthorizationState {authorization_state = Just s}) _ st =
+  Auth.handle st s >> pure st
+handleAnswer (Update U.UpdateOption {U.name = Just k, U.value = Just v}) _ st =
+  pure $ Option.handle st (k, v)
+handleAnswer (Update (UpdateNewChat {chat = Just chat})) _ st =
+  pure $ Chat.handlenew st chat
+handleAnswer (Chat chat) xtra st =
+  pure $ Chat.handle st chat xtra
+handleAnswer (Error _) xtra st =
+  pure $ Error.handle st xtra
+handleAnswer (Update U.UpdateMessageSendFailed {old_message_id = Just m}) _ st =
+  pure $ Message.handleFailed st m
+handleAnswer (Update U.UpdateMessageSendSucceeded {old_message_id = Just m}) _ st =
+  Message.handleSuccess st m
+handleAnswer (Message m) xtra st =
+  pure $ Message.handleMessage st m xtra
+handleAnswer _ _ st = pure st
 
 sendTextMsg :: Int -> String -> SM.SendMessage
 sendTextMsg cID text =
-  SM.SendMessage
-    { SM.chat_id = Just cID,
-      SM.reply_to_message_id = Nothing,
-      SM.reply_markup = Nothing,
-      SM.options = Nothing,
-      SM.message_thread_id = Nothing,
-      SM.input_message_content =
-        Just
-          IMC.InputMessageText
-            { IMC.clear_draft = Nothing,
-              IMC.disable_web_page_preview = Nothing,
-              IMC.text =
-                Just
-                  FT.FormattedText
-                    { FT.text = Just text,
-                      FT.entities = Nothing
-                    }
-            }
-    }
+  let t =
+        FT.defaultFormattedText
+          { FT.text = Just (T.pack text)
+          }
+      c =
+        IMC.InputMessageText
+          { text = Just t,
+            disable_web_page_preview = Nothing,
+            clear_draft = Nothing
+          }
+   in SM.defaultSendMessage
+        { SM.chat_id = Just cID,
+          SM.input_message_content = Just c
+        }
 
-setChatFotoFromFile :: Int -> FilePath -> SCP.SetChatPhoto
-setChatFotoFromFile cID path =
-  SCP.SetChatPhoto
-    { SCP.chat_id = Just cID,
-      SCP.photo =
-        Just
-          ICP.InputChatPhotoStatic
-            { ICP.photo =
-                Just
-                  IF.InputFileLocal
-                    { IF.path = Just path
-                    }
-            }
-    }
-
--- deleteMessages :: Int -> [Int] -> DM.DeleteMessages
--- deleteMessages cID msgs = DM.DeleteMessages (Just True) (Just msgs) (Just cID)
+getChat :: Int -> GetChat
+getChat cId = GetChat {chat_id = Just cId}
