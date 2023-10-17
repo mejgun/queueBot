@@ -41,7 +41,7 @@ packages:
 #
 extra-deps:
 - git: https://github.com/mejgun/haskell-tdlib.git
-  commit: 3398e9e7a9f648302eab7ed540c21dca5260dc17
+  commit: 30c3f24a8be666ff3772e343fa5fa5a25c70879c
 
 # Override default flag values for local packages and extra-deps
 # flags: {}
