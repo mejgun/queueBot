@@ -19,7 +19,7 @@ import Lib
     updateQueue,
   )
 import System.Directory.Internal.Prelude (getArgs)
-import System.IO (hFlush, stdout)
+import System.IO (BufferMode (NoBuffering), hSetBuffering, stdout)
 import TD.Data.FormattedText qualified as FT
 import TD.Data.InputMessageContent (InputMessageContent (disable_web_page_preview))
 import TD.Data.InputMessageContent qualified as IMC
@@ -37,6 +37,7 @@ import TD.Query.SetLogVerbosityLevel
 
 main :: IO ()
 main = do
+  hSetBuffering stdout NoBuffering
   getArgs >>= \case
     [apiid, apihash] -> do
       cl <- create
@@ -66,7 +67,6 @@ mainLoop st = do
     -- new message from tdlib
     Just (res, extra) -> do
       putStrLn $ shortShow res
-      hFlush stdout
       newSt <- handleAnswer res extra st
       mainLoop newSt
   where

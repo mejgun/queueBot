@@ -5,15 +5,15 @@
 
 packages:
 - completed:
-    commit: 30c3f24a8be666ff3772e343fa5fa5a25c70879c
+    commit: a4bd75bd7621a2b0873688dbc24cfaf26c1f14ba
     git: https://github.com/mejgun/haskell-tdlib.git
     name: haskell-tdlib
     pantry-tree:
-      sha256: ef498bc8780916f9dfe3502e8911def46abf9743bbffc42c471a3b6197aa3b83
-      size: 81316
+      sha256: f68010c4a7ba410ac4ec777f43e72646ece739683e70922181ca80ae3650d5f2
+      size: 81347
     version: 2.0.1.0
   original:
-    commit: 30c3f24a8be666ff3772e343fa5fa5a25c70879c
+    commit: a4bd75bd7621a2b0873688dbc24cfaf26c1f14ba
     git: https://github.com/mejgun/haskell-tdlib.git
 snapshots:
 - completed:
