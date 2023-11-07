@@ -5,19 +5,19 @@
 
 packages:
 - completed:
-    commit: a4bd75bd7621a2b0873688dbc24cfaf26c1f14ba
+    commit: ce76f6364253e06e79baa26545b86bed69dbf1cd
     git: https://github.com/mejgun/haskell-tdlib.git
     name: haskell-tdlib
     pantry-tree:
-      sha256: f68010c4a7ba410ac4ec777f43e72646ece739683e70922181ca80ae3650d5f2
-      size: 81347
-    version: 2.0.1.0
+      sha256: c17f3b76c7bf9bb17ddc36797c3902c4e0a83a8678336b0b36d9c475d8a2ec29
+      size: 83210
+    version: 2.0.4.0
   original:
-    commit: a4bd75bd7621a2b0873688dbc24cfaf26c1f14ba
+    commit: ce76f6364253e06e79baa26545b86bed69dbf1cd
     git: https://github.com/mejgun/haskell-tdlib.git
 snapshots:
 - completed:
-    sha256: 1d663bec402f77fa09fa3e8cf288c3c7eb18a1f28a5e0c331ac47adeacd21346
-    size: 640034
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/21/16.yaml
-  original: lts-21.16
+    sha256: fb482b8e2d5d061cdda4ba1da2957c012740c893a5ee1c1b99001adae7b1fbe7
+    size: 640046
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/21/19.yaml
+  original: lts-21.19

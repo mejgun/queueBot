@@ -21,7 +21,7 @@ import Lib
 import System.Directory.Internal.Prelude (getArgs)
 import System.IO (BufferMode (NoBuffering), hSetBuffering, stdout)
 import TD.Data.FormattedText qualified as FT
-import TD.Data.InputMessageContent (InputMessageContent (disable_web_page_preview))
+import TD.Data.InputMessageContent (InputMessageContent (link_preview_options))
 import TD.Data.InputMessageContent qualified as IMC
 import TD.Data.Update (Update (UpdateNewChat))
 import TD.Data.Update qualified as U
@@ -121,7 +121,7 @@ sendTextMsg cID text =
       c =
         IMC.InputMessageText
           { text = Just t,
-            disable_web_page_preview = Nothing,
+            link_preview_options = Nothing,
             clear_draft = Nothing
           }
    in SM.defaultSendMessage
